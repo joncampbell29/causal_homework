@@ -5,29 +5,12 @@ format: pdf
 editor: visual
 ---
 
-## Quarto
-
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
-
-## Running Code
-
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
-
 ```{r}
 #| label: load-packages
 #| message: false
 
 library(tidyverse)
 ```
-
-You can add options to executable code like this
-
-```{r}
-#| echo: false
-2 * 2
-```
-
-The `echo: false` option disables the printing of code (only output is displayed).
 
 ## Part 1
 
@@ -155,6 +138,36 @@ rand_assign_ind = combn(1:4, m =2, simplify = FALSE)
 diffs <- matrix(NA, nrow = length(sample_ind), ncol = length(rand_assign_ind))
 
 for (samp in seq_along(sample_ind)) {
+  sample <- pot_outcomes[sample_ind[[samp]],]
+  
+  for (i in seq_along(rand_assign_ind)) {
+    
+    Y1_obs <- sample[rand_assign_ind[[i]],"Y1_pot"]
+    Y0_obs <- sample[-rand_assign_ind[[i]],"Y0_pot"]
+    
+    difference <- mean(Y1_obs) - mean(Y0_obs)
+    
+    diffs[samp,i] <- difference
+  }
+}
+var(as.vector(diffs))
+```
+
+```{r}
+var1 = var(pot_outcomes[,"Y1_pot"])
+var0 = var(pot_outcomes[,"Y0_pot"])
+
+var01 = sum((pot_outcomes[,"Y1_pot"] -pot_outcomes[,"Y0_pot"] - (mean(pot_outcomes[,"Y1_pot"])-mean(pot_outcomes[,"Y0_pot"])))^2)/11
+
+var0/6+var1/6-var01/12
+```
+
+### Question 2
+
+```{r}
+diffs <- matrix(NA, nrow = length(sample_ind), ncol = length(rand_assign_ind))
+
+for (samp in seq_along(sample_ind)) {
   for (i in seq_along(rand_assign_ind)) {
     
     sample <- pot_outcomes[sample_ind[[samp]],]
@@ -165,28 +178,107 @@ for (samp in seq_along(sample_ind)) {
     diffs[samp,i] <- difference
   }
 }
-var(as.vector(diffs))
+var(apply(diffs, MARGIN = 1,FUN = sum))
 ```
-
-```{r}
-var1 = sum((pot_outcomes[,"Y1_pot"]-mean(pot_outcomes[,"Y1_pot"]))^2)/3
-var0 = sum((pot_outcomes[,"Y0_pot"]-mean(pot_outcomes[,"Y0_pot"]))^2)/3
-
-var01 = sum((pot_outcomes[,"Y1_pot"] -pot_outcomes[,"Y0_pot"] - (mean(pot_outcomes[,"Y1_pot"])-mean(pot_outcomes[,"Y0_pot"])))^2)/11
-
-var0/6+var1/6-var01/12
-```
-
-### Question 2
 
 ## Part 3
 
 ```{r}
 bestair <- readxl::read_xlsx("bestair640-1.xlsx", sheet = "data")
+for (i in seq_along(bestair)) {
+  y = pull(bestair[,i])
+  m = mean(y, na.rm = TRUE)
+  y = ifelse(is.na(y), m, y)
+  bestair[,i] = y
+}
 ```
 
 ### Question 1
 
+```{r}
+baselines <- c("gender","age","bmi",
+ "race","sbp_baseline","dbp_baseline","ahi_baseline","ess_baseline")
+ASDs = matrix(NA, nrow = 1, ncol = 8)
+colnames(ASDs) <- baselines
+Z <- bestair$treatment_arm
+for (bl in baselines) {
+  X <- pull(bestair[,bl])
+  s1 <- var(X[Z==1])
+  s0 <- var(X[Z==0])
+  diff_sum <- sum(X*Z)/sum(Z)-sum(X*(1-Z))/sum(1-Z)
+  asd <- diff_sum/sqrt(s1+s0)
+  ASDs[,bl] <- asd
+  
+}
+```
+
+```{r}
+#love plot
+asd_dat <- tibble(
+  bls = baselines,
+  asd = ASDs[1,]
+)
+ggplot(asd_dat,aes(x = asd, y = bls)) +
+  geom_point() +
+  labs(title = "Love Plot Bestair ASDs"
+       ,y = "Baseline Measure"
+       ,x = "ASD")
+```
+
 ### Question 2
 
+```{r}
+Z <- bestair$treatment_arm
+Y <- bestair$sbp_6mo
+tau_unadj <- mean(Y[Z==1]) - mean(Y[Z==0])
+tau_unadj
+```
+
+```{r}
+bestair_centered <- bestair|>
+  mutate(across(gender:ess_baseline, ~ .x-mean(.x)))
+
+ancova1 <- lm(formula = sbp_6mo~.,data = bestair_centered)
+tau_adj_anc1 <- ancova1$coefficients["treatment_arm"]
+
+ancova2 <- lm(formula = sbp_6mo~.^2,data = bestair_centered)
+tau_adj_anc2 <- ancova2$coefficients["treatment_arm"]
+```
+
+```{r}
+X_mat <- as.matrix(bestair_centered[,2:9])
+as.vector(ancova1$residuals)
+```
+
+```{r}
+hw_se_anc1 <-sqrt(car::hccm(ancova1
+                            ,type = "hc2")["treatment_arm","treatment_arm"])
+#sqrt(car::hccm(ancova2, type = "hc0")["treatment_arm","treatment_arm"])
+```
+
+```{r}
+
+```
+
 ### Question 3
+
+```{r}
+bestair_hyperten <- bestair_centered |>
+  mutate(resist_hyperten = if_else(sbp_6mo>=130,1,0)) |>
+  select(treatment_arm:ess_baseline,resist_hyperten)
+```
+
+#### a)
+
+```{r}
+Z <- bestair$treatment_arm
+Y <- bestair_hyperten$resist_hyperten
+mean(Y[Z==1]) - mean(Y[Z==0])
+bin_ols <- lm(resist_hyperten~., data = bestair_hyperten)
+bin_ols$coefficients["treatment_arm"]
+
+bin_ols_inter <- lm(resist_hyperten~.^2, data = bestair_hyperten)
+bin_ols_inter$coefficients["treatment_arm"]
+```
+
+#### b)
