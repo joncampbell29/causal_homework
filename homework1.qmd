@@ -1,0 +1,192 @@
+---
+title: "Homework1"
+author: "Jon Campbell"
+format: pdf
+editor: visual
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## Running Code
+
+When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+```{r}
+#| label: load-packages
+#| message: false
+
+library(tidyverse)
+```
+
+You can add options to executable code like this
+
+```{r}
+#| echo: false
+2 * 2
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
+
+## Part 1
+
+### Question 1
+
+```{r}
+Y_obs <- c(8.62,1.48,8.93,9.57,2.65,7.3,.06,1.72,2.19,7.32,7.53,7.62)
+Z <- c(rep(0,6), rep(1,6))
+```
+
+#### a)
+
+```{r}
+Y_treat <- Y_obs[Z == 1]
+Y_notreat <- Y_obs[Z == 0]
+tstat_obs <- mean(Y_treat) - mean(Y_notreat)
+
+ind_combos <- combn(12,6, simplify = FALSE)
+tstats = c()
+for (i in seq_along(ind_combos)) {
+  Y_treat_mean <- mean(Y_obs[ind_combos[[i]]])
+  Y_notreat_mean <- mean(Y_obs[-ind_combos[[i]]])
+  tstats <- c(tstats, Y_treat_mean - Y_notreat_mean)
+}
+
+pval <- mean(abs(tstats) >= abs(tstat_obs))
+pval
+```
+
+#### b)
+
+```{r}
+sampled_tstats <- sample(tstats, size = 1000, replace = TRUE)
+pval_1000 <- mean(abs(sampled_tstats) >= abs(tstat_obs))
+pval_1000
+```
+
+#### c)
+
+```{r}
+t.test(Y_treat, Y_notreat, var.equal = TRUE)$p.value
+```
+
+#### d)
+
+```{r}
+
+```
+
+### Question 2
+
+#### a)
+
+```{r}
+X <- c(1:6,1:6)
+taus = c()
+for (i in unique(X)) {
+  tau = Y_obs[Z == 1 & X == i] - Y_obs[Z == 0 & X == i]
+  taus = c(taus, tau)
+}
+tstat_obs = mean(taus)
+
+tstats <- c()
+for (i in seq_along(ind_combos)) {
+  Z_perm = rep(0, 12)
+  Z_perm[ind_combos[[i]]] = 1
+  
+  taus = c()
+  for (j in unique(X)) {
+    tau = Y_obs[Z_perm == 1 & X == j] - Y_obs[Z_perm == 0 & X == j]
+    taus = c(taus, tau)
+  }
+  tstats = c(tstats,mean(taus))
+}
+
+pval <- mean(abs(tstats) >= abs(tstat_obs))
+pval
+```
+
+#### b)
+
+```{r}
+
+```
+
+```{r}
+ind_combos[[70]]
+```
+
+#### c)
+
+```{r}
+t.test(Y_treat, Y_notreat
+       , var.equal = TRUE, paired = TRUE)
+```
+
+#### d)
+
+### Question 3
+
+$$
+Y_i^{obs} = Z_iY_i(1)+(1-Z_i)Y_i(0)\\
+\hat{\tau}= \frac{1}{n_1}\sum_{i=1}^nZ_iY_i^{obs}-\frac{1}{n_0}\sum_{i=1}^n(1-Z_i)Y_i^{obs}\\
+\hat{\tau}=\frac{1}{n_1}\sum_{i=1}^nZ_iY_i(1)-\frac{1}{n_0}\sum_{i=1}^n(1-Z_i)Y_i(0)\\
+\text{Under CRE}~Z_i\perp{Y_i(0),Y_i(1)}~\text{and}~E[Y(z)]=Y(z)\\
+E[\hat{\tau}] = \frac{1}{n_1}\sum_{i=1}^nE[Z_i]Y_i(1)-\frac{1}{n_0}\sum_{i=1}^nE(1-Z_i)Y_i(0)\\
+= \frac{1}{n_1}\sum_{i=1}^n\frac{n_1}{n}Y_i(1)-\frac{1}{n_0}\sum_{i=1}^n\frac{n_0}{n}Y_i(0)\\
+=\frac{1}{n_1}\sum_{i=1}^nY_i(1)-\frac{1}{n_0}\sum_{i=1}^nY_i(0) = \tau
+$$
+
+### Question 4
+
+## Part 2
+
+### Question 1
+
+```{r}
+pot_outcomes <- matrix(c(35, 40, 45 ,55, 55 ,55, 65, 70, 25, 30, 45, 55, 60, 65, 75, 80, 35, 40, 55, 50, 35, 40, 65, 70), ncol = 2, byrow = TRUE)
+colnames(pot_outcomes) <- c("Y1_pot","Y0_pot")
+sample_ind = combn(1:12, m =4, simplify = FALSE)
+rand_assign_ind = combn(1:4, m =2, simplify = FALSE)
+```
+
+```{r}
+diffs <- matrix(NA, nrow = length(sample_ind), ncol = length(rand_assign_ind))
+
+for (samp in seq_along(sample_ind)) {
+  for (i in seq_along(rand_assign_ind)) {
+    
+    sample <- pot_outcomes[sample_ind[[samp]],]
+    Y1_obs <- sample[rand_assign_ind[[i]],"Y1_pot"]
+    Y0_obs <- sample[-rand_assign_ind[[i]],"Y0_pot"]
+    difference <- mean(Y1_obs) - mean(Y0_obs)
+    
+    diffs[samp,i] <- difference
+  }
+}
+var(as.vector(diffs))
+```
+
+```{r}
+var1 = sum((pot_outcomes[,"Y1_pot"]-mean(pot_outcomes[,"Y1_pot"]))^2)/3
+var0 = sum((pot_outcomes[,"Y0_pot"]-mean(pot_outcomes[,"Y0_pot"]))^2)/3
+
+var01 = sum((pot_outcomes[,"Y1_pot"] -pot_outcomes[,"Y0_pot"] - (mean(pot_outcomes[,"Y1_pot"])-mean(pot_outcomes[,"Y0_pot"])))^2)/11
+
+var0/6+var1/6-var01/12
+```
+
+### Question 2
+
+## Part 3
+
+```{r}
+bestair <- readxl::read_xlsx("bestair640-1.xlsx", sheet = "data")
+```
+
+### Question 1
+
+### Question 2
+
+### Question 3
