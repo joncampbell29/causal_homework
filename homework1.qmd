@@ -10,6 +10,7 @@ editor: visual
 #| message: false
 
 library(tidyverse)
+library(knitr)
 ```
 
 ## Part 1
@@ -133,81 +134,97 @@ $$
 
 ### Question 4
 
+Yes, it is possible for there to be evidence of a additive treatment effect under randomization. If this is the case we can change the Null Hypothesis from $Y_i(0)=Y_i(1)$ to $Y_i(0)-Y_i(1) = \tau$ and set $\tau$ equal to some fixed value. To impliment this with the data above we can do a two-sample t-test but set $\mu$ equal to some fixed value.
+
 ## Part 2
 
 ### Question 1
 
 ```{r}
 pot_outcomes <- matrix(c(35, 40, 45 ,55, 55 ,55, 65, 70, 25, 30, 45, 55, 60, 65, 75, 80, 35, 40, 55, 50, 35, 40, 65, 70), ncol = 2, byrow = TRUE)
-colnames(pot_outcomes) <- c("Y1_pot","Y0_pot")
-sample_ind = combn(1:12, m =4, simplify = FALSE)
-rand_assign_ind = combn(1:4, m =2, simplify = FALSE)
+colnames(pot_outcomes) <- c("Y1","Y0")
+
+sample_ind = combn(1:12, 4)
+assign_ind = combn(1:4, 2)
 ```
 
 ```{r}
-diffs <- matrix(NA, nrow = length(sample_ind), ncol = length(rand_assign_ind))
+mean_diffs <- matrix(NA, nrow = ncol(sample_ind)
+                     , ncol = ncol(assign_ind))
 
-for (samp in seq_along(sample_ind)) {
-  sample <- pot_outcomes[sample_ind[[samp]],]
+for (i in 1:ncol(sample_ind)) {
   
-  for (i in seq_along(rand_assign_ind)) {
+  indexes <- sample_ind[,i]
+  sample <- pot_outcomes[indexes,]
+  
+  for (j in 1:ncol(assign_ind)) {
     
-    Y1_obs <- sample[rand_assign_ind[[i]],"Y1_pot"]
-    Y0_obs <- sample[-rand_assign_ind[[i]],"Y0_pot"]
-    
-    difference <- mean(Y1_obs) - mean(Y0_obs)
-    
-    diffs[samp,i] <- difference
+    assignment <- assign_ind[,j]
+    assignment <- assign_ind[,sample(1:6,1)]
+    Y0_obs <- sample[assignment,"Y0"]
+    Y1_obs <- sample[-assignment,"Y1"]
+    diff <- mean(Y1_obs) - mean(Y0_obs)
+    mean_diffs[i,j] = diff
   }
 }
-var(as.vector(diffs))
+
 ```
+
+From Simulation: `r var(as.vector(mean_diffs))`
 
 ```{r}
-var1 = var(pot_outcomes[,"Y1_pot"])
-var0 = var(pot_outcomes[,"Y0_pot"])
+var1 <- sum((pot_outcomes[,"Y1"]-mean(pot_outcomes[,"Y1"]))^2)/11
 
-var01 = sum((pot_outcomes[,"Y1_pot"] -pot_outcomes[,"Y0_pot"] - (mean(pot_outcomes[,"Y1_pot"])-mean(pot_outcomes[,"Y0_pot"])))^2)/11
+var0 <- sum((pot_outcomes[,"Y0"]-mean(pot_outcomes[,"Y0"]))^2)/11
 
-var0/6+var1/6-var01/12
+diff_means <- mean(pot_outcomes[,"Y1"]) - mean(pot_outcomes[,"Y0"])
+var01 <- sum((pot_outcomes[,"Y1"] - pot_outcomes[,"Y0"] - diff_means)^2)/11
+form <- var0/6 + var1/6 - var01/12
 ```
+
+From Formula: `r form`
 
 ### Question 2
 
 ```{r}
-diffs <- matrix(NA, nrow = length(sample_ind), ncol = length(rand_assign_ind))
+variances <- matrix(NA, nrow = ncol(sample_ind)
+                     , ncol = ncol(assign_ind))
 
-for (samp in seq_along(sample_ind)) {
-  for (i in seq_along(rand_assign_ind)) {
+for (i in 1:ncol(sample_ind)) {
+  
+  indexes <- sample_ind[,i]
+  sample <- pot_outcomes[indexes,]
+  
+  for (j in 1:ncol(assign_ind)) {
     
-    sample <- pot_outcomes[sample_ind[[samp]],]
-    Y1_obs <- sample[rand_assign_ind[[i]],"Y1_pot"]
-    Y0_obs <- sample[-rand_assign_ind[[i]],"Y0_pot"]
-    difference <- mean(Y1_obs) - mean(Y0_obs)
+    assignment <- assign_ind[,j]
+    Y0_obs <- sample[assignment,"Y0"]
+    Y1_obs <- sample[-assignment,"Y1"]
     
-    diffs[samp,i] <- difference
+    sigma <- var(Y0_obs)/2 + var(Y1_obs)/2
+    
+    variances[i,j] = sigma
   }
 }
-var(apply(diffs, MARGIN = 1,FUN = sum))
 ```
+
+Neyman Estimator of Variance: `r mean(as.vector(variances))`
 
 ## Part 3
 
 ```{r}
 bestair <- readxl::read_xlsx("bestair640-1.xlsx", sheet = "data")
-for (i in seq_along(bestair)) {
-  y = pull(bestair[,i])
-  m = mean(y, na.rm = TRUE)
-  y = ifelse(is.na(y), m, y)
-  bestair[,i] = y
-}
+bestair <- bestair |>
+  mutate(across(treatment_arm:sbp_6mo, ~ if_else(is.na(.x)
+                                                 ,mean(.x,na.rm = TRUE),.x))) |>
+  mutate(race = if_else(race == 2,1,0))
 ```
 
 ### Question 1
 
 ```{r}
 baselines <- c("gender","age","bmi",
- "race","sbp_baseline","dbp_baseline","ahi_baseline","ess_baseline")
+               "race","sbp_baseline","dbp_baseline","ahi_baseline","ess_baseline")
 ASDs = matrix(NA, nrow = 1, ncol = 8)
 colnames(ASDs) <- baselines
 Z <- bestair$treatment_arm
@@ -240,8 +257,10 @@ ggplot(asd_dat,aes(x = asd, y = bls)) +
 ```{r}
 Z <- bestair$treatment_arm
 Y <- bestair$sbp_6mo
-tau_unadj <- mean(Y[Z==1]) - mean(Y[Z==0])
-tau_unadj
+estimate_unadj <- mean(Y[Z==1]) - mean(Y[Z==0])
+se_unadj <- summary(lm(Y~Z))$coefficients[2,"Std. Error"]
+hw_unadj <- sqrt(car::hccm(lm(Y ~ Z), type = "hc2")[2, 2])
+unadj_res <- c(estimate_unadj,se_unadj,hw_unadj)
 ```
 
 ```{r}
@@ -249,26 +268,29 @@ bestair_centered <- bestair|>
   mutate(across(gender:ess_baseline, ~ .x-mean(.x)))
 
 ancova1 <- lm(formula = sbp_6mo~.,data = bestair_centered)
-tau_adj_anc1 <- ancova1$coefficients["treatment_arm"]
+estimate_anc1 <- ancova1$coefficients[["treatment_arm"]]
+se_anc1 <- summary(ancova1)$coefficients[2,"Std. Error"]
+hw_anc1 <-sqrt(car::hccm(ancova1
+                         ,type = "hc2")["treatment_arm","treatment_arm"])
+anc1_res <- c(estimate_anc1, se_anc1, hw_anc1)
 
 ancova2 <- lm(formula = sbp_6mo~.^2,data = bestair_centered)
-tau_adj_anc2 <- ancova2$coefficients["treatment_arm"]
+estimate_anc2 <- ancova2$coefficients[["treatment_arm"]]
+se_anc2 <- summary(ancova2)$coefficients[2,"Std. Error"]
+hw_anc2 <- NA
+anc2_res <- c(estimate_anc2, se_anc2, hw_anc2)
 ```
 
 ```{r}
-X_mat <- as.matrix(bestair_centered[,2:9])
-as.vector(ancova1$residuals)
+results <- cbind(unadj_res,anc1_res,anc2_res)
+colnames(results) <- c("Unadjusted ATE","ANCOVA1","ANCOVA2")
+rownames(results) <- c("Estimate","s.e.","Huber-White s.e.")
+results |>
+  round(3) |>
+  kable()
 ```
 
-```{r}
-hw_se_anc1 <-sqrt(car::hccm(ancova1
-                            ,type = "hc2")["treatment_arm","treatment_arm"])
-#sqrt(car::hccm(ancova2, type = "hc0")["treatment_arm","treatment_arm"])
-```
-
-```{r}
-
-```
+The Estimates decrease as we use a more flexible model and add interaction terms.
 
 ### Question 3
 
@@ -283,12 +305,39 @@ bestair_hyperten <- bestair_centered |>
 ```{r}
 Z <- bestair$treatment_arm
 Y <- bestair_hyperten$resist_hyperten
-mean(Y[Z==1]) - mean(Y[Z==0])
+bin_unadj_est <- mean(Y[Z==1]) - mean(Y[Z==0])
 bin_ols <- lm(resist_hyperten~., data = bestair_hyperten)
-bin_ols$coefficients["treatment_arm"]
+bin_est <- bin_ols$coefficients["treatment_arm"]
 
 bin_ols_inter <- lm(resist_hyperten~.^2, data = bestair_hyperten)
-bin_ols_inter$coefficients["treatment_arm"]
+bin_est_inter <- bin_ols_inter$coefficients["treatment_arm"]
+
+results <- cbind(bin_unadj_est,bin_est,bin_est_inter)
+colnames(results) <- c("Unadjusted ATE","ANCOVA1","ANCOVA2")
+rownames(results) <- "Binary Estimates"
+results |> round(3) |> kable()
 ```
 
 #### b)
+
+```{r}
+#| warning: false
+logist_unadj <- glm(resist_hyperten~treatment_arm, family = binomial(link = "logit"), data = bestair_hyperten)
+
+logist_anc1 <- glm(resist_hyperten~., family = binomial(link = "logit"), data = bestair_hyperten)
+
+logist_anc2 <- glm(resist_hyperten~.^2, family = binomial(link = "logit"), data = bestair_hyperten)
+```
+
+```{r}
+unadj_ate <- logist_unadj$coefficients[[2]]
+anc1 <- logist_anc1$coefficients[["treatment_arm"]]
+anc2 <- logist_anc2$coefficients[["treatment_arm"]]
+
+results <- cbind(unadj_ate,anc1,anc2)
+colnames(results) <- c("Unadjusted ATE","ANCOVA1","ANCOVA2")
+rownames(results) <- "Logistic Estimates"
+results |> round(3) |> kable()
+```
+
+The linear model seems to perform better than logistic regression.
