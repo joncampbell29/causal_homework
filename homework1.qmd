@@ -24,94 +24,103 @@ Z <- c(rep(0,6), rep(1,6))
 #### a)
 
 ```{r}
-Y_treat <- Y_obs[Z == 1]
-Y_notreat <- Y_obs[Z == 0]
-tstat_obs <- mean(Y_treat) - mean(Y_notreat)
+Y_obs <- c(8.62,1.48,8.93,9.57,2.65,7.3,.06,1.72,2.19,7.32,7.53,7.62)
+Z <- c(rep(0,6), rep(1,6))
 
-ind_combos <- combn(12,6, simplify = FALSE)
-tstats = c()
-for (i in seq_along(ind_combos)) {
-  Y_treat_mean <- mean(Y_obs[ind_combos[[i]]])
-  Y_notreat_mean <- mean(Y_obs[-ind_combos[[i]]])
-  tstats <- c(tstats, Y_treat_mean - Y_notreat_mean)
+tstat_obs <- mean(Y_obs[Z == 1]) - mean(Y_obs[Z == 0])
+
+ind_combos <- combn(1:12,6)
+tstats <- vector(mode = "double",length = ncol(ind_combos))
+
+for (i in 1:ncol(ind_combos)) {
+  Zperm <- rep(0,12)
+  Zperm[ind_combos[,i]] = 1
+  tstats[i] = mean(Y_obs[Zperm==1]) - mean(Y_obs[Zperm==0])
 }
 
 pval <- mean(abs(tstats) >= abs(tstat_obs))
-pval
 ```
+
+The two-tailed p-value is `r round(pval,4)`.
 
 #### b)
 
 ```{r}
+set.seed(2929)
 sampled_tstats <- sample(tstats, size = 1000, replace = TRUE)
 pval_1000 <- mean(abs(sampled_tstats) >= abs(tstat_obs))
-pval_1000
 ```
+
+The two-tailed p-value from 1000 samples from the distribution under the Sharp Null Hypothesis is `r round(pval_1000,4)`.
 
 #### c)
 
 ```{r}
-t.test(Y_treat, Y_notreat, var.equal = TRUE)$p.value
+ttest_pval <- t.test(Y_obs[Z==1], Y_obs[Z==0],var.equal = TRUE)$p.value
 ```
+
+The p-value using a t-test is `r round(ttest_pval,4)`.
 
 #### d)
 
-```{r}
+(b)'s approximation of (a) is part of the assignment mechanism component of the potential outcome framework as it draws from the distribution of all possible treatment assignments.
 
-```
+(c)'s approximation of (a) falls under the probabilistic model component of the potential outcome framework as it assumes the data in both groups is normally distributed with equal variance.
 
 ### Question 2
 
 #### a)
 
 ```{r}
-X <- c(1:6,1:6)
-taus = c()
-for (i in unique(X)) {
-  tau = Y_obs[Z == 1 & X == i] - Y_obs[Z == 0 & X == i]
-  taus = c(taus, tau)
-}
-tstat_obs = mean(taus)
+Y_obs_orig <- matrix(Y_obs,nrow = 6)
+colnames(Y_obs_orig) <- c("0", "1")
 
-tstats <- c()
-for (i in seq_along(ind_combos)) {
-  Z_perm = rep(0, 12)
-  Z_perm[ind_combos[[i]]] = 1
-  
-  taus = c()
-  for (j in unique(X)) {
-    tau = Y_obs[Z_perm == 1 & X == j] - Y_obs[Z_perm == 0 & X == j]
-    taus = c(taus, tau)
-  }
-  tstats = c(tstats,mean(taus))
+combos <-expand.grid(pair1 = 0:1,pair2 = 0:1, pair3 = 0:1
+                     ,pair4 = 0:1,pair5 = 0:1, pair6 = 0:1)
+```
+
+```{r}
+tstats <- vector(mode = "double",length = nrow(combos))
+for (i in 1:nrow(combos)) {
+  Y_obs_perm <- Y_obs_orig
+  ind <- which(combos[i,] == 1)
+  Y_obs_perm[ind,] = Y_obs_perm[ind,c(2,1)]
+  tstats[i] = mean(Y_obs_perm[,2]) - mean(Y_obs_perm[,1])
 }
 
 pval <- mean(abs(tstats) >= abs(tstat_obs))
-pval
 ```
+
+The p-value from randomizing within pairs is `r round(pval,4)`.
 
 #### b)
 
 ```{r}
-
+set.seed(2121)
+sampled_tstats <- sample(tstats, size = 1000, replace = TRUE)
+pval_1000 <- mean(abs(sampled_tstats) >= abs(tstat_obs))
 ```
 
-```{r}
-ind_combos[[70]]
-```
+The p-value from sampling is `r round(pval_1000,4)`.
 
 #### c)
 
 ```{r}
-t.test(Y_treat, Y_notreat
-       , var.equal = TRUE, paired = TRUE)
+ttest_pval <- t.test(Y_obs[Z==1], Y_obs[Z==0], var.equal = TRUE, paired = TRUE)
 ```
 
+Using a paired t-test the p-value is `r round(ttest_pval$p.value,4)`.
+
 #### d)
+
+Part (2b) is a part of the assignment mechanism as it makes sure $Z\perp X$ through randomization.
+
+Part (2c) is a part of the probabilistic model just like question 1.
 
 ### Question 3
 
 $$
+\begin{aligned}
 Y_i^{obs} = Z_iY_i(1)+(1-Z_i)Y_i(0)\\
 \hat{\tau}= \frac{1}{n_1}\sum_{i=1}^nZ_iY_i^{obs}-\frac{1}{n_0}\sum_{i=1}^n(1-Z_i)Y_i^{obs}\\
 \hat{\tau}=\frac{1}{n_1}\sum_{i=1}^nZ_iY_i(1)-\frac{1}{n_0}\sum_{i=1}^n(1-Z_i)Y_i(0)\\
@@ -119,6 +128,7 @@ Y_i^{obs} = Z_iY_i(1)+(1-Z_i)Y_i(0)\\
 E[\hat{\tau}] = \frac{1}{n_1}\sum_{i=1}^nE[Z_i]Y_i(1)-\frac{1}{n_0}\sum_{i=1}^nE(1-Z_i)Y_i(0)\\
 = \frac{1}{n_1}\sum_{i=1}^n\frac{n_1}{n}Y_i(1)-\frac{1}{n_0}\sum_{i=1}^n\frac{n_0}{n}Y_i(0)\\
 =\frac{1}{n_1}\sum_{i=1}^nY_i(1)-\frac{1}{n_0}\sum_{i=1}^nY_i(0) = \tau
+\end{aligned}
 $$
 
 ### Question 4
