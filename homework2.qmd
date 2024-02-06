@@ -11,16 +11,38 @@ editor: visual
 
 library(tidyverse)
 library(knitr)
+library(PSweight)
 ```
 
 ## Part 1
 
 ### Question 1
 
+```{r}
+hsr <- read.table("data/hw2/HSR.txt", header = TRUE)
+#pg is treatment group
+#i_aqoc is outcome
+#p_z = P(Y(z)==1)
+#target estimand is ATE p_1 - p_2
+```
+
 #### a)
 
 ```{r}
 
+ps_formula <- as.factor(pg) ~ i_age + as.factor(i_sex) + as.factor(i_race) + as.factor(i_educ) + as.factor(i_insu) + as.factor(i_drug) + as.factor(i_seve) + com_t + pcs_sd + mcs_sd
+
+
+prop_scores <- glm(ps_formula, family = "binomial"
+                   , data = hsr)$fitted.values
+
+prop_score_test2 <- SumStat(ps.formula = ps_formula
+                            , weight = c('IPW')#'overlap'
+                            ,data = hsr)
+```
+
+```{r}
+plot(prop_score_test2, metric = "ASD")
 ```
 
 #### b)
@@ -94,6 +116,10 @@ library(knitr)
 ```
 
 ## Part 2
+
+```{r}
+brscn <- read.table("data/hw2/brscn.txt", header = TRUE)
+```
 
 ### Question 1
 
