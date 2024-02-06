@@ -1,0 +1,110 @@
+---
+title: "Homework2"
+author: "Jon Campbell"
+format: pdf
+editor: visual
+---
+
+```{r}
+#| label: load-packages
+#| message: false
+
+library(tidyverse)
+library(knitr)
+```
+
+## Part 1
+
+### Question 1
+
+#### a)
+
+```{r}
+
+```
+
+#### b)
+
+```{r}
+
+```
+
+#### c)
+
+```{r}
+
+```
+
+#### d)
+
+```{r}
+
+```
+
+### Question 2
+
+#### a)
+
+```{r}
+
+```
+
+#### b)
+
+```{r}
+
+```
+
+#### c)
+
+```{r}
+
+```
+
+### Question 3
+
+#### a)
+
+```{r}
+
+```
+
+#### b)
+
+```{r}
+
+```
+
+#### c)
+
+```{r}
+
+```
+
+#### d)
+
+```{r}
+
+```
+
+#### e)
+
+```{r}
+
+```
+
+## Part 2
+
+### Question 1
+
+```{r}
+
+```
+
+## Part 3 (optional)
+
+### Question 1
+
+```{r}
+
+```
