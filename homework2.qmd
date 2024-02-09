@@ -20,47 +20,95 @@ library(PSweight)
 
 ```{r}
 hsr <- read.table("data/hw2/HSR.txt", header = TRUE)
-#pg is treatment group
-#i_aqoc is outcome
 #p_z = P(Y(z)==1)
 #target estimand is ATE p_1 - p_2
+X <- apply(hsr[,c(1,3,4,5,6,7,8,12)], MARGIN = 2, factor)
+Z <- factor(hsr$pg)
+Y <- factor(hsr$i_aqoc)
 ```
 
 #### a)
 
 ```{r}
-
 ps_formula <- as.factor(pg) ~ i_age + as.factor(i_sex) + as.factor(i_race) + as.factor(i_educ) + as.factor(i_insu) + as.factor(i_drug) + as.factor(i_seve) + com_t + pcs_sd + mcs_sd
-
 
 prop_scores <- glm(ps_formula, family = "binomial"
                    , data = hsr)$fitted.values
 
-prop_score_test2 <- SumStat(ps.formula = ps_formula
-                            , weight = c('IPW')#'overlap'
+prop_score_summary <- SumStat(ps.formula = ps_formula
+                            , weight = c('IPW','overlap')
                             ,data = hsr)
 ```
 
 ```{r}
-plot(prop_score_test2, metric = "ASD")
+#Estimated propensity Scores
+cat(prop_scores)
 ```
+
+```{r}
+#checking balance via ASD
+plot(prop_score_summary, metric = "ASD")
+```
+
+From the love plot we see that most of the covariates have an ASD above 0.1 when unweighted but perform much better with IPW. mcs_sd and severity2 are slightly above 0.1 and race2 is around 0.35 under IPW. The covariates are perfected balanced with overlap weighing.
+
+```{r}
+#Inverse Probability Weights 
+IPW_weights <- ifelse(Z == 2, 1/prop_scores,1/(1-prop_scores))
+
+#Normalized IPW 
+IPW_weights_norm <- numeric(length(IPW_weights))
+IPW_weights_norm[Z==2] = IPW_weights[Z==2]/sum(IPW_weights[Z==2])
+IPW_weights_norm[Z==1] = IPW_weights[Z==1]/sum(IPW_weights[Z==1])
+ggplot(data.frame(weights = IPW_weights
+                  ,high=as.factor(ifelse(IPW_weights>15,1,0)))
+       , aes(x = weights, fill = high)) +
+  geom_histogram(bins = 20) +
+  labs(title = "Distribution of IPW", x = "IPW")
+```
+
+Looking at he distribution of IPW there are `r sum(IPW_weights>17)` observations with high weights relative to the sample.
 
 #### b)
 
 ```{r}
-
+tibble(
+  prop_score = prop_scores,
+  trt = Z
+) |>
+  ggplot(aes(x = prop_score, fill = trt)) +
+  geom_density(alpha = 0.5)
+plot(prop_score_summary, metric = "ASD")
 ```
+
+From the density plot of propensity scores by group, there is good overlap. The love plot shows good balance with overlap weighting and IPW weighting.
 
 #### c)
 
 ```{r}
+unweighted <- prop_score_summary$unweighted.sumstat[,1:2]
+colnames(unweighted) <- c("unweighted.trt1", "unweighted.trt2")
 
+ipw_weighted <- prop_score_summary$IPW.sumstat[,1:2]
+colnames(ipw_weighted) <- c("IPW.trt1", "IPW.trt2")
+
+overlap_weighted <- prop_score_summary$overlap.sumstat[,1:2]
+colnames(overlap_weighted) <- c("overlap.trt1", "overlap.trt2")
+
+tab1 <- cbind(unweighted, ipw_weighted, overlap_weighted) |> round(4)
+tab1 |>
+  kable()
 ```
 
 #### d)
 
 ```{r}
+ps.hsr <- as.factor(pg) ~ i_age + as.factor(i_sex) + as.factor(i_race) + as.factor(i_educ) + as.factor(i_insu) + as.factor(i_drug) + as.factor(i_seve) + com_t + pcs_sd + mcs_sd
 
+ate.ipw <- PSweight(ps.formula = ps.hsr, yname = "i_aqoc", data = hsr
+                    , weight = "IPW")
+ate.overlap <- PSweight(ps.formula = ps.hsr, yname = "i_aqoc", data = hsr
+                    , weight = "overlap")
 ```
 
 ### Question 2
