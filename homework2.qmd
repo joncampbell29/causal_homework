@@ -24,7 +24,7 @@ hsr <- read.table("data/hw2/HSR.txt", header = TRUE)
 #target estimand is ATE p_1 - p_2
 X <- apply(hsr[,c(1,3,4,5,6,7,8,12)], MARGIN = 2, factor)
 Z <- factor(hsr$pg)
-Y <- factor(hsr$i_aqoc)
+Y <- hsr$i_aqoc
 ```
 
 #### a)
@@ -103,33 +103,68 @@ tab1 |>
 #### d)
 
 ```{r}
+Z <- ifelse(Z == 1,0,1)
 ps.hsr <- as.factor(pg) ~ i_age + as.factor(i_sex) + as.factor(i_race) + as.factor(i_educ) + as.factor(i_insu) + as.factor(i_drug) + as.factor(i_seve) + com_t + pcs_sd + mcs_sd
 
-ate.ipw <- PSweight(ps.formula = ps.hsr, yname = "i_aqoc", data = hsr
+ate.ipw.norm <- PSweight(ps.formula = ps.hsr, yname = "i_aqoc", data = hsr
                     , weight = "IPW")
-ate.overlap <- PSweight(ps.formula = ps.hsr, yname = "i_aqoc", data = hsr
+ato.overlap <- PSweight(ps.formula = ps.hsr, yname = "i_aqoc", data = hsr
                     , weight = "overlap")
+ate.ipw.nonnorm <- summary(lm(i_aqoc ~ pg, data = hsr, weights = IPW_weights))$coefficients[2,1:2]
+results.ate <- rbind(summary(ate.ipw.norm, type = "DIF", contrast = c(-1,1))$estimates[,1:2],
+      summary(ato.overlap, type = "DIF", contrast = c(-1,1))$estimates[,1:2],
+      ate.ipw.nonnorm)
+rownames(results.ate) <- c("ATE IPW Normalized", "ATO Overlap", "ATE NonNormalized")
+results.ate |> round(4)
+
 ```
+
+
 
 ### Question 2
 
 #### a)
 
 ```{r}
+ps_formula <- as.factor(pg) ~ i_age + as.factor(i_sex) + as.factor(i_race) + as.factor(i_educ) + as.factor(i_insu) + as.factor(i_drug) + as.factor(i_seve) + com_t + pcs_sd + mcs_sd
 
+prop_scores <- glm(ps_formula, family = "binomial"
+                   , data = hsr)$fitted.values
+
+hsr_subsetted <- subset(hsr, i_sex == 1)
+hsr_subsetted$ipw_weights <- ifelse(hsr_subsetted$pg == 1, 1/prop_scores,1/(1-prop_scores))
+att.subgroup <- summary(lm(i_aqoc ~ pg + i_age + i_sex + as.factor(i_race) + as.factor(i_educ) + as.factor(i_insu) + as.factor(i_drug) + as.factor(i_seve) + com_t + pcs_sd + mcs_sd, weights = ipw_weights, data = hsr_subsetted))$coefficients[2,1:2]
+att.subgroup
 ```
 
 #### b)
 
 ```{r}
+ps_formula <- as.factor(pg) ~ i_age + as.factor(i_race) + as.factor(i_educ) + as.factor(i_insu) + as.factor(i_drug) + as.factor(i_seve) + com_t + pcs_sd + mcs_sd
 
+prop_scores <- glm(ps_formula, family = "binomial"
+                   , data = hsr)$fitted.values
+
+hsr_subsetted <- subset(hsr, i_sex == 1)
+hsr_subsetted$ipw_weights <- ifelse(hsr_subsetted$pg == 1, 1/prop_scores,1/(1-prop_scores))
+
+att.subgroup <- summary(lm(i_aqoc ~ pg + i_age + i_sex + as.factor(i_race) + as.factor(i_educ) + as.factor(i_insu) + as.factor(i_drug) + as.factor(i_seve) + com_t + pcs_sd + mcs_sd, weights = ipw_weights, data = hsr_subsetted))$coefficients[2,1:2]
+att.subgroup
 ```
+
 
 #### c)
 
 ```{r}
+hsr_subsetted <- subset(hsr, i_sex == 1)
+ps.hsr <- as.factor(pg) ~ i_age + as.factor(i_race) + as.factor(i_educ) + as.factor(i_insu) + as.factor(i_drug) + as.factor(i_seve) + com_t + pcs_sd + mcs_sd
 
+
+summary(PSweight(ps.formula = ps.hsr, yname = "i_aqoc", data = hsr_subsetted
+                    , weight = "IPW"))$estimates[,1:2]
 ```
+
+
 
 ### Question 3
 
@@ -175,10 +210,4 @@ brscn <- read.table("data/hw2/brscn.txt", header = TRUE)
 
 ```
 
-## Part 3 (optional)
 
-### Question 1
-
-```{r}
-
-```
