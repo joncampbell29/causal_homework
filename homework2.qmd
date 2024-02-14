@@ -232,27 +232,42 @@ estimates <- numeric(length = 5)
 for (s in 1:5) {
   strat_dat <- dat[dat$strat==s,]
   mod <- glm(y~z, data = strat_dat, family = "binomial")
-  estimates[s] = summary(mod)$coefficients["z",1]
+  estimates[s] = summary(mod)$coefficients[2,1]
 }
-exp(mean(estimates))
+mean(exp(estimates))
 
 ```
 
 #### e)
 
 ```{r}
-seq(0,1,length.out = 5)
+estimates <- numeric(5)
+for (s in 1:5) {
+  strat_dat <- dat[dat$strat==s,]
+  mod <- glm(y~z, data = strat_dat, family = "binomial")
+  p <- predict(mod, type = "response")
+  phat_1 <- mean(p[strat_dat$z ==1])
+  phat_2 <- mean(p[strat_dat$z ==0])
+  estimates[s] = (phat_1*(1-phat_2))/(phat_2*(1-phat_1))
+}
+
+mean(estimates)
 ```
 
 ## Part 2
 
 ```{r}
 brscn <- read.table("data/hw2/brscn.txt", header = TRUE)
+brscn <- brscn |>
+  mutate(across(2:12,as.factor))
 ```
 
 ### Question 1
 
 ```{r}
+form <- black ~ agecat + mcaid + poor + cendivis + model + taxstat + affil + blprop + blproplogit + (1|group)
+#test <- PSweight_cl(form, yname = "brscn", data = brscn
+                #    , weight = "IPW", bootstrap = TRUE)
 
 ```
 
