@@ -1,5 +1,5 @@
 ---
-title: "Homework2"
+title: "Homework 2"
 author: "Jon Campbell"
 format: pdf
 editor: visual
@@ -134,6 +134,7 @@ prop_scores <- glm(ps_formula, family = "binomial"
 hsr_subsetted <- subset(hsr, i_sex == 1)
 hsr_subsetted$ipw_weights <- ifelse(hsr_subsetted$pg == 1, 1/prop_scores,1/(1-prop_scores))
 att.subgroup <- summary(lm(i_aqoc ~ pg + i_age + i_sex + as.factor(i_race) + as.factor(i_educ) + as.factor(i_insu) + as.factor(i_drug) + as.factor(i_seve) + com_t + pcs_sd + mcs_sd, weights = ipw_weights, data = hsr_subsetted))$coefficients[2,1:2]
+
 att.subgroup
 ```
 
@@ -164,38 +165,82 @@ summary(PSweight(ps.formula = ps.hsr, yname = "i_aqoc", data = hsr_subsetted
                     , weight = "IPW"))$estimates[,1:2]
 ```
 
-
+Option (c) is most likely the best way to estimate $E[Y(1)|V=1)] - E[Y(2)|V=1]$ because it adjusts the propensity score estimation to the subgroup. This helps with incorporating information specific to V=1
 
 ### Question 3
+p_z = Pr(Y(z)=1)
+fraction of patients satisfied with
+the service in group z
+
+Interest
+Q = p_1(1-p_2)/p_2(1-p_1)
 
 #### a)
 
 ```{r}
-
+Z <- ifelse(hsr$pg == 1, 1,0)
+X <- scale(as.matrix(hsr[,2:11]))
+Y <- hsr$i_aqoc
+delta <- summary(glm(Y~X + Z + X*Z, family = "binomial"))$coefficients["Z",1]
+Q <- exp(delta)
+Q
 ```
 
 #### b)
 
 ```{r}
 
+model <- glm(Y~X + Z + X*Z, family = "binomial")
+p <- predict(model, type = "response")
+
+phat_1 <- mean(p[Z ==1])
+phat_2 <- mean(p[Z ==0])
+Q <- (phat_1*(1-phat_2))/(phat_2*(1-phat_1))
+Q
 ```
 
 #### c)
 
 ```{r}
+new_dat1 <-  model[["model"]] |> mutate(Z = rep(1,nrow(new_dat)))
+new_dat2 <-  model[["model"]] |> mutate(Z = rep(0,nrow(new_dat)))
+
+p1 <- predict(model, type = "response",newdata = new_dat1)
+p2 <- predict(model, type = "response",newdata = new_dat2)
+phat_1 <- mean(p1)
+phat_2 <- mean(p2)
+Q <- (phat_1*(1-phat_2))/(phat_2*(1-phat_1))
+Q
 
 ```
 
 #### d)
 
 ```{r}
+prop_score = glm(Z ~ X, family = binomial)$fitted.values
 
+q.prop_score = quantile(prop_score, c(0.2,0.4,0.6,0.8))
+stratas = cut(prop_score, breaks = c(0,q.prop_score,1), labels = 1:5)
+dat <- tibble(
+  z = Z,
+  x = X,
+  y = Y,
+  strat = stratas
+)
+
+estimates <- numeric(length = 5)
+for (s in 1:5) {
+  strat_dat <- dat[dat$strat==s,]
+  mod <- glm(y~z, data = strat_dat, family = "binomial")
+  estimates[s] = summary(mod)$coefficients["z",1]
+}
+exp(mean(estimates))
 ```
 
 #### e)
 
 ```{r}
-
+seq(0,1,length.out = 5)
 ```
 
 ## Part 2
