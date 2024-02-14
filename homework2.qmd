@@ -202,8 +202,8 @@ Q
 #### c)
 
 ```{r}
-new_dat1 <-  model[["model"]] |> mutate(Z = rep(1,nrow(new_dat)))
-new_dat2 <-  model[["model"]] |> mutate(Z = rep(0,nrow(new_dat)))
+new_dat1 <-  model[["model"]] |> mutate(Z = rep(1,length(Y)))
+new_dat2 <-  model[["model"]] |> mutate(Z = rep(0,length(Y)))
 
 p1 <- predict(model, type = "response",newdata = new_dat1)
 p2 <- predict(model, type = "response",newdata = new_dat2)
@@ -235,6 +235,7 @@ for (s in 1:5) {
   estimates[s] = summary(mod)$coefficients["z",1]
 }
 exp(mean(estimates))
+
 ```
 
 #### e)
