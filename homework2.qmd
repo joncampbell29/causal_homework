@@ -201,13 +201,11 @@ att.subgroup <- mean(y*z*w - y*(1-z)*w)
 att.subgroup
 ```
 
-Option (c) is most likely the best way to estimate $E[Y(1)|V=1)] - E[Y(2)|V=1]$ because it adjusts the propensity score estimation to the subgroup. This helps with incorporating information specific to V=1.
-
 
 ### Question 3
 
 
-
+Option (c) is most likely the best way to estimate $E[Y(1)|V=1)] - E[Y(2)|V=1]$ because it adjusts the propensity score estimation to the subgroup. This helps with incorporating information specific to V=1.
 
 
 ## Part 2
@@ -215,10 +213,10 @@ Option (c) is most likely the best way to estimate $E[Y(1)|V=1)] - E[Y(2)|V=1]$ 
 ```{r}
 brscn <- read.table("data/hw2/brscn.txt", header = TRUE)
 
-str(brscn)
+
 brscn.fact <- brscn |>
   mutate(across(2:12,factor))
-str(brscn.fact)
+
 ```
 
 ### Question 1
@@ -228,20 +226,70 @@ str(brscn.fact)
 form <- black ~ agecat + mcaid + poor + cendivis + model + taxstat + affil + blprop + blproplogit + (1|group)
 
 #test <- PSweight_cl(form, yname = "brscn", data = brscn)
-test <- glmer(form, family = "binomial", data = brscn, verbose = 1)#$fitted.values
+#$fitted.values
 #glmer ; weighted average for each cluster
 #test$coefficients
-pscores <- predict(test, type = "response")
-pscores
+fit <- glmer(form, family = "binomial", data = brscn.fact)
+pscores <- predict(fit, type = "response")
+brscn.fact <- brscn.fact |>
+  mutate(pscore = pscores) |>
+  mutate(w = if_else(black == 1, 1/pscore, 1/(1-pscore)))
 
-test2 <- glmer(form, family = "binomial", data = brscn.fact, verbose = 1)
-test3 <- PSweight_cl(ps.formula = form,yname = "brscn"
-                     ,data = brscn.fact,weight = "IPW", bootstrap = TRUE)
+
 
 ```
 
 
+```{r}
 
+brscn <- brscn.fact |>
+  mutate(across(c(group,black,brscn),function(x){as.numeric(levels(x))[x]}))
+
+get_trt_effect <- function(num,dat) {
+  filt <- dat |> filter(group == num)
+  z <- filt$black
+  y <- filt$brscn
+  w <- filt$w
+
+  res <- list(
+    trt.effect = sum(y*z*w)/sum(z*w) - sum(y*(1-z)*w)/sum((1-z)*w),
+    grp.weight = sum(w)
+  )
+  S <- 50
+  boot <- numeric(S)
+  for (i in 1:S) {
+    boot.sample <- filt[sample(nrow(filt)
+                                  , nrow(filt), replace = TRUE), ]
+    z <- boot.sample$black
+    y <- boot.sample$brscn
+    w <- boot.sample$w
+    boot[i] <- sum(y*z*w)/sum(z*w) - sum(y*(1-z)*w)/sum((1-z)*w)
+  }
+  
+  res["se"] <- sum((boot - res$trt.effect)^2)/(length(boot)-1)
+  
+  res
+}
+
+
+grps <- unique(brscn$group)
+
+trt.effects <- numeric(length(grps))
+grp.weights <- numeric(length(grps))
+boot.se <- numeric(length(grps))
+for (i in seq_along(grps)) {
+  res <- get_trt_effect(grps[i],brscn)
+  trt.effects[i] <- res$trt.effect
+  grp.weights[i] <- res$grp.weight
+  boot.se[i] <- res$se
+}
+
+grp.weights.norm <- grp.weights/sum(grp.weights)
+ate <- sum(trt.effects*grp.weights.norm)/length(grps)
+boot.st.error <- sum(boot.se*grp.weights.norm)/length(grps)
+
+cbind(ate,boot.st.error)
+```
 
 
 
