@@ -12,6 +12,7 @@ editor: visual
 library(tidyverse)
 library(knitr)
 library(PSweight)
+library(lme4)
 ```
 
 ## Part 1
@@ -20,103 +21,114 @@ library(PSweight)
 
 ```{r}
 hsr <- read.table("data/hw2/HSR.txt", header = TRUE)
-#p_z = P(Y(z)==1)
-#target estimand is ATE p_1 - p_2
-X <- apply(hsr[,c(1,3,4,5,6,7,8,12)], MARGIN = 2, factor)
-Z <- factor(hsr$pg)
-Y <- hsr$i_aqoc
+hsr <- hsr |>
+  mutate(pg = if_else(pg == 2,1,0)) |> #Z = 1 (group 2), 0 (Group 1)
+  mutate(across(-c(i_age,com_t,mcs_sd,pcs_sd), factor)) |>
+  rename(z = pg, y = i_aqoc)
+
 ```
 
 #### a)
 
 ```{r}
-ps_formula <- as.factor(pg) ~ i_age + as.factor(i_sex) + as.factor(i_race) + as.factor(i_educ) + as.factor(i_insu) + as.factor(i_drug) + as.factor(i_seve) + com_t + pcs_sd + mcs_sd
 
-prop_scores <- glm(ps_formula, family = "binomial"
-                   , data = hsr)$fitted.values
+ps.form <- z ~ i_age + i_sex + i_race + i_educ + i_insu + i_drug + i_seve + com_t + pcs_sd + mcs_sd
 
-prop_score_summary <- SumStat(ps.formula = ps_formula
+pscore_summary <- SumStat(ps.formula = ps.form
                             , weight = c('IPW','overlap')
                             ,data = hsr)
+hsr$pscore <- pscore_summary$propensity[,2]
+
+ggplot(hsr, aes(x = pscore, fill = z)) +
+  geom_density(alpha = 0.5) +
+  labs(title = "Distribution of Propensity Scores",
+       subtitle = "By Treatment Group (Group 2 = Blue, Group 1 = Red",
+       x = "Propensity Scores",
+       fill = "Treatment Group")
+
+plot(pscore_summary, metric = "ASD")
+
 ```
 
-```{r}
-#Estimated propensity Scores
-cat(prop_scores)
-```
-
-```{r}
-#checking balance via ASD
-plot(prop_score_summary, metric = "ASD")
-```
-
+There is pretty good overlap from the distribution of propensity scores by treatment group.
 From the love plot we see that most of the covariates have an ASD above 0.1 when unweighted but perform much better with IPW. mcs_sd and severity2 are slightly above 0.1 and race2 is around 0.35 under IPW. The covariates are perfected balanced with overlap weighing.
 
-```{r}
-#Inverse Probability Weights 
-IPW_weights <- ifelse(Z == 2, 1/prop_scores,1/(1-prop_scores))
 
-#Normalized IPW 
-IPW_weights_norm <- numeric(length(IPW_weights))
-IPW_weights_norm[Z==2] = IPW_weights[Z==2]/sum(IPW_weights[Z==2])
-IPW_weights_norm[Z==1] = IPW_weights[Z==1]/sum(IPW_weights[Z==1])
-ggplot(data.frame(weights = IPW_weights
-                  ,high=as.factor(ifelse(IPW_weights>15,1,0)))
-       , aes(x = weights, fill = high)) +
-  geom_histogram(bins = 20) +
-  labs(title = "Distribution of IPW", x = "IPW")
+```{r}
+#With trimming set at 0.05
+hsr.trim <- PStrim(ps.formula = ps.form
+                   ,data = hsr, delta = 0.1)[["data"]] |>
+  ungroup()
+
+pscore_summary <- SumStat(ps.formula = ps.form
+                          , weight = c('IPW','overlap')
+                          ,data = hsr.trim)
+
+hsr.trim <- hsr.trim |>
+  mutate(pscore = pscore_summary$propensity[,2])
 ```
 
-Looking at he distribution of IPW there are `r sum(IPW_weights>17)` observations with high weights relative to the sample.
 
 #### b)
 
 ```{r}
-tibble(
-  prop_score = prop_scores,
-  trt = Z
-) |>
-  ggplot(aes(x = prop_score, fill = trt)) +
-  geom_density(alpha = 0.5)
-plot(prop_score_summary, metric = "ASD")
+ggplot(hsr.trim, aes(x = pscore, fill = z)) +
+  geom_density(alpha = 0.5) +
+  labs(title = "Distribution of Propensity Scores (Trimmed)",
+       subtitle = "By Treatment Group (Group 2 = Blue, Group 1 = Red",
+       x = "Propensity Scores",
+       fill = "Treatment Group")
+
+#checking balance via ASD
+plot(pscore_summary, metric = "ASD")
 ```
 
-From the density plot of propensity scores by group, there is good overlap. The love plot shows good balance with overlap weighting and IPW weighting.
+From the love plot we see better performance from IPW weighting after trimming 5% of the data. All the ASDs are below 0.1. Not much change in overlap, it is still good.
+
 
 #### c)
 
 ```{r}
-unweighted <- prop_score_summary$unweighted.sumstat[,1:2]
-colnames(unweighted) <- c("unweighted.trt1", "unweighted.trt2")
+#Inverse Probability Weights 
+hsr.trim <- hsr.trim |>
+  mutate(w = ifelse(z == 1, 1/pscore, 1/(1-pscore)))
 
-ipw_weighted <- prop_score_summary$IPW.sumstat[,1:2]
-colnames(ipw_weighted) <- c("IPW.trt1", "IPW.trt2")
 
-overlap_weighted <- prop_score_summary$overlap.sumstat[,1:2]
-colnames(overlap_weighted) <- c("overlap.trt1", "overlap.trt2")
 
-tab1 <- cbind(unweighted, ipw_weighted, overlap_weighted) |> round(4)
-tab1 |>
-  kable()
+table1 <- cbind(
+  pscore_summary[["unweighted.sumstat"]][,1:2],
+  pscore_summary[["IPW.sumstat"]][,1:2],
+  pscore_summary[["overlap.sumstat"]][,1:2]
+)
+colnames(table1) = c("Original.0", "Original.trt"
+                     ,"IPW.0","IPW.trt"
+                     , "Overlap.0","Overlap.trt")
+table1 |>round(4)
 ```
 
 #### d)
 
 ```{r}
-Z <- ifelse(Z == 1,0,1)
-ps.hsr <- as.factor(pg) ~ i_age + as.factor(i_sex) + as.factor(i_race) + as.factor(i_educ) + as.factor(i_insu) + as.factor(i_drug) + as.factor(i_seve) + com_t + pcs_sd + mcs_sd
 
-ate.ipw.norm <- PSweight(ps.formula = ps.hsr, yname = "i_aqoc", data = hsr
-                    , weight = "IPW")
-ato.overlap <- PSweight(ps.formula = ps.hsr, yname = "i_aqoc", data = hsr
-                    , weight = "overlap")
-ate.ipw.nonnorm <- summary(lm(i_aqoc ~ pg, data = hsr, weights = IPW_weights))$coefficients[2,1:2]
-results.ate <- rbind(summary(ate.ipw.norm, type = "DIF", contrast = c(-1,1))$estimates[,1:2],
-      summary(ato.overlap, type = "DIF", contrast = c(-1,1))$estimates[,1:2],
-      ate.ipw.nonnorm)
-rownames(results.ate) <- c("ATE IPW Normalized", "ATO Overlap", "ATE NonNormalized")
-results.ate |> round(4)
+hsr.trimmed <- data.frame(hsr.trim) |>
+  mutate(across(c(1,3:8,12),function(x){as.numeric(levels(x))[x]})) |>
+  mutate(across(c(2,9:11),scale))
 
+ate.ipw<- summary(lm(y ~ z,data=hsr.trimmed
+                     ,weights=hsr.trimmed$w))$coefficients[2,1:2]
+
+ate.ipw.norm <- summary(PSweight(ps.formula = ps.form, yname = "y"
+                                 ,data = hsr.trimmed, weight = "IPW"))$estimates[,1:2]
+ato <- summary(PSweight(ps.formula = ps.form, yname = "y", data = hsr.trimmed
+                    , weight = "overlap"))$estimates[,1:2]
+
+res <- rbind(
+  ate.ipw,
+  ate.ipw.norm,
+  ato
+)
+rownames(res) <- c("ATE NonNormalized","ATE Normalized", "ATO")
+res
 ```
 
 
@@ -126,30 +138,42 @@ results.ate |> round(4)
 #### a)
 
 ```{r}
-ps_formula <- as.factor(pg) ~ i_age + as.factor(i_sex) + as.factor(i_race) + as.factor(i_educ) + as.factor(i_insu) + as.factor(i_drug) + as.factor(i_seve) + com_t + pcs_sd + mcs_sd
 
-prop_scores <- glm(ps_formula, family = "binomial"
-                   , data = hsr)$fitted.values
+ps.form <- z ~ i_age + i_sex + i_race + i_educ + i_insu + i_drug + i_seve + com_t + pcs_sd + mcs_sd
 
-hsr_subsetted <- subset(hsr, i_sex == 1)
-hsr_subsetted$ipw_weights <- ifelse(hsr_subsetted$pg == 1, 1/prop_scores,1/(1-prop_scores))
-att.subgroup <- summary(lm(i_aqoc ~ pg + i_age + i_sex + as.factor(i_race) + as.factor(i_educ) + as.factor(i_insu) + as.factor(i_drug) + as.factor(i_seve) + com_t + pcs_sd + mcs_sd, weights = ipw_weights, data = hsr_subsetted))$coefficients[2,1:2]
+ps <- glm(ps.form, family = "binomial"
+                   , data = hsr.trim)$fitted.values
+hsr.trim <- hsr.trim |> mutate(pscore = ps)
+hsr_subsetted <- subset(hsr.trim, i_sex == 1)
 
+hsr_subsetted$w <- ifelse(hsr_subsetted$z == 1, 1/hsr_subsetted$pscore
+                          , 1/(1-hsr_subsetted$pscore))
+z <- as.numeric(levels(hsr_subsetted$z))[hsr_subsetted$z]
+y <- as.numeric(levels(hsr_subsetted$y))[hsr_subsetted$y]
+w <- hsr_subsetted$w
+
+att.subgroup <- mean(y*z*w - y*(1-z)*w)
 att.subgroup
 ```
 
 #### b)
 
 ```{r}
-ps_formula <- as.factor(pg) ~ i_age + as.factor(i_race) + as.factor(i_educ) + as.factor(i_insu) + as.factor(i_drug) + as.factor(i_seve) + com_t + pcs_sd + mcs_sd
+ps.form <- z ~ i_age + i_race + i_educ + i_insu + i_drug + i_seve + com_t + pcs_sd + mcs_sd
 
-prop_scores <- glm(ps_formula, family = "binomial"
-                   , data = hsr)$fitted.values
+ps <- glm(ps.form, family = "binomial"
+                   , data = hsr.trim)$fitted.values
 
-hsr_subsetted <- subset(hsr, i_sex == 1)
-hsr_subsetted$ipw_weights <- ifelse(hsr_subsetted$pg == 1, 1/prop_scores,1/(1-prop_scores))
+hsr.trim <- hsr.trim |> mutate(pscore = ps)
+hsr_subsetted <- subset(hsr.trim, i_sex == 1)
 
-att.subgroup <- summary(lm(i_aqoc ~ pg + i_age + i_sex + as.factor(i_race) + as.factor(i_educ) + as.factor(i_insu) + as.factor(i_drug) + as.factor(i_seve) + com_t + pcs_sd + mcs_sd, weights = ipw_weights, data = hsr_subsetted))$coefficients[2,1:2]
+hsr_subsetted$w <- ifelse(hsr_subsetted$z == 1, 1/hsr_subsetted$pscore
+                          , 1/(1-hsr_subsetted$pscore))
+z <- as.numeric(levels(hsr_subsetted$z))[hsr_subsetted$z]
+y <- as.numeric(levels(hsr_subsetted$y))[hsr_subsetted$y]
+w <- hsr_subsetted$w
+
+att.subgroup <- mean(y*z*w - y*(1-z)*w)
 att.subgroup
 ```
 
@@ -157,118 +181,68 @@ att.subgroup
 #### c)
 
 ```{r}
-hsr_subsetted <- subset(hsr, i_sex == 1)
-ps.hsr <- as.factor(pg) ~ i_age + as.factor(i_race) + as.factor(i_educ) + as.factor(i_insu) + as.factor(i_drug) + as.factor(i_seve) + com_t + pcs_sd + mcs_sd
 
+hsr_subsetted <- subset(hsr.trim, i_sex == 1)
 
-summary(PSweight(ps.formula = ps.hsr, yname = "i_aqoc", data = hsr_subsetted
-                    , weight = "IPW"))$estimates[,1:2]
+ps.form <- z ~ i_age + i_race + i_educ + i_insu + i_drug + i_seve + com_t + pcs_sd + mcs_sd
+
+ps <- glm(ps.form, family = "binomial"
+                   , data = hsr_subsetted)$fitted.values
+
+hsr_subsetted <- hsr_subsetted |> mutate(pscore = ps)
+
+hsr_subsetted$w <- ifelse(hsr_subsetted$z == 1, 1/hsr_subsetted$pscore
+                          , 1/(1-hsr_subsetted$pscore))
+z <- as.numeric(levels(hsr_subsetted$z))[hsr_subsetted$z]
+y <- as.numeric(levels(hsr_subsetted$y))[hsr_subsetted$y]
+w <- hsr_subsetted$w
+
+att.subgroup <- mean(y*z*w - y*(1-z)*w)
+att.subgroup
 ```
 
-Option (c) is most likely the best way to estimate $E[Y(1)|V=1)] - E[Y(2)|V=1]$ because it adjusts the propensity score estimation to the subgroup. This helps with incorporating information specific to V=1
+Option (c) is most likely the best way to estimate $E[Y(1)|V=1)] - E[Y(2)|V=1]$ because it adjusts the propensity score estimation to the subgroup. This helps with incorporating information specific to V=1.
+
 
 ### Question 3
-p_z = Pr(Y(z)=1)
-fraction of patients satisfied with
-the service in group z
 
-Interest
-Q = p_1(1-p_2)/p_2(1-p_1)
 
-#### a)
 
-```{r}
-Z <- ifelse(hsr$pg == 1, 1,0)
-X <- scale(as.matrix(hsr[,2:11]))
-Y <- hsr$i_aqoc
-delta <- summary(glm(Y~X + Z + X*Z, family = "binomial"))$coefficients["Z",1]
-Q <- exp(delta)
-Q
-```
 
-#### b)
-
-```{r}
-
-model <- glm(Y~X + Z + X*Z, family = "binomial")
-p <- predict(model, type = "response")
-
-phat_1 <- mean(p[Z ==1])
-phat_2 <- mean(p[Z ==0])
-Q <- (phat_1*(1-phat_2))/(phat_2*(1-phat_1))
-Q
-```
-
-#### c)
-
-```{r}
-new_dat1 <-  model[["model"]] |> mutate(Z = rep(1,length(Y)))
-new_dat2 <-  model[["model"]] |> mutate(Z = rep(0,length(Y)))
-
-p1 <- predict(model, type = "response",newdata = new_dat1)
-p2 <- predict(model, type = "response",newdata = new_dat2)
-phat_1 <- mean(p1)
-phat_2 <- mean(p2)
-Q <- (phat_1*(1-phat_2))/(phat_2*(1-phat_1))
-Q
-
-```
-
-#### d)
-
-```{r}
-prop_score = glm(Z ~ X, family = binomial)$fitted.values
-
-q.prop_score = quantile(prop_score, c(0.2,0.4,0.6,0.8))
-stratas = cut(prop_score, breaks = c(0,q.prop_score,1), labels = 1:5)
-dat <- tibble(
-  z = Z,
-  x = X,
-  y = Y,
-  strat = stratas
-)
-
-estimates <- numeric(length = 5)
-for (s in 1:5) {
-  strat_dat <- dat[dat$strat==s,]
-  mod <- glm(y~z, data = strat_dat, family = "binomial")
-  estimates[s] = summary(mod)$coefficients[2,1]
-}
-mean(exp(estimates))
-
-```
-
-#### e)
-
-```{r}
-estimates <- numeric(5)
-for (s in 1:5) {
-  strat_dat <- dat[dat$strat==s,]
-  mod <- glm(y~z, data = strat_dat, family = "binomial")
-  p <- predict(mod, type = "response")
-  phat_1 <- mean(p[strat_dat$z ==1])
-  phat_2 <- mean(p[strat_dat$z ==0])
-  estimates[s] = (phat_1*(1-phat_2))/(phat_2*(1-phat_1))
-}
-
-mean(estimates)
-```
 
 ## Part 2
 
 ```{r}
 brscn <- read.table("data/hw2/brscn.txt", header = TRUE)
-brscn <- brscn |>
-  mutate(across(2:12,as.factor))
+
+str(brscn)
+brscn.fact <- brscn |>
+  mutate(across(2:12,factor))
+str(brscn.fact)
 ```
 
 ### Question 1
 
 ```{r}
+
 form <- black ~ agecat + mcaid + poor + cendivis + model + taxstat + affil + blprop + blproplogit + (1|group)
-#test <- PSweight_cl(form, yname = "brscn", data = brscn
-                #    , weight = "IPW", bootstrap = TRUE)
+
+#test <- PSweight_cl(form, yname = "brscn", data = brscn)
+test <- glmer(form, family = "binomial", data = brscn, verbose = 1)#$fitted.values
+#glmer ; weighted average for each cluster
+#test$coefficients
+pscores <- predict(test, type = "response")
+pscores
+
+test2 <- glmer(form, family = "binomial", data = brscn.fact, verbose = 1)
+test3 <- PSweight_cl(ps.formula = form,yname = "brscn"
+                     ,data = brscn.fact,weight = "IPW", bootstrap = TRUE)
 
 ```
+
+
+
+
+
 
 
