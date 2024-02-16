@@ -28,6 +28,8 @@ hsr <- hsr |>
 
 ```
 
+{{< pagebreak >}}
+
 #### a)
 
 ```{r}
@@ -68,6 +70,7 @@ hsr.trim <- hsr.trim |>
   mutate(pscore = pscore_summary$propensity[,2])
 ```
 
+{{< pagebreak >}}
 
 #### b)
 
@@ -84,6 +87,9 @@ plot(pscore_summary, metric = "ASD")
 ```
 
 From the love plot we see better performance from IPW weighting after trimming 5% of the data. All the ASDs are below 0.1 for IPW. Not much change in overlap, it is still good.
+
+
+{{< pagebreak >}}
 
 
 #### c)
@@ -105,6 +111,9 @@ colnames(table1) = c("Original.0", "Original.trt"
                      , "Overlap.0","Overlap.trt")
 table1 |>round(4)
 ```
+
+
+{{< pagebreak >}}
 
 #### d)
 
@@ -131,7 +140,7 @@ rownames(res) <- c("ATE NonNormalized","ATE Normalized", "ATO")
 res
 ```
 
-
+{{< pagebreak >}}
 
 ### Question 2
 
@@ -157,6 +166,9 @@ att.subgroup
 ```
 ATT is `r att.subgroup`
 
+
+{{< pagebreak >}}
+
 #### b)
 
 ```{r}
@@ -180,6 +192,7 @@ att.subgroup
 Att is `r att.subgroup`
 
 
+{{< pagebreak >}}
 
 #### c)
 
@@ -216,6 +229,9 @@ Option (b) is most likely the best way to estimate $E[Y(1)|V=1)] - E[Y(2)|V=1]$ 
 (b) and (d) seem most correct because they are getting $p_z$ from gettign the average probabilities within a treatment group.
 
 
+
+
+{{< pagebreak >}}
 
 ## Part 2
 
